@@ -42,7 +42,7 @@ if __name__ == '__main__':
     num_pages = int(re.search('Page 1 of ([0-9]+)', pages_text).group(1))
 
     imdb = []
-    for cur_page, start_pos in get_start_positions(1):
+    for cur_page, start_pos in get_start_positions(num_pages):
         print 'Downloading page', cur_page, 'of', num_pages
         url = args.ratings_url + '?start=' + str(start_pos) + '&view=compact&sort=ratings_date:desc&defaults=1'
         resp = requests.get(url)
