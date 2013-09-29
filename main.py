@@ -2,8 +2,10 @@ import argparse
 import re
 import os.path
 import time
+import codecs
 import requests
 import bs4
+from unicodewriter import UnicodeWriter
 
 def get_start_positions(last_page):
     cur_page = 1
