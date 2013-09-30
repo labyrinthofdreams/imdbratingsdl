@@ -52,6 +52,13 @@ if __name__ == '__main__':
             resp = requests.get(url)
         html = bs4.BeautifulSoup(resp.text)
         trs = html.find_all('tr', class_='list_item')
+        if len(trs) == 0:
+            print 'IMDb returned bad data. Retrying...'
+            retry = True
+            while retry:
+                resp = requests.get(url)
+                if resp.status_code == 200:
+                    retry = False
         del trs[0] # Skip header
         for tr in trs:
             position = unicode(len(imdb) + 1)
