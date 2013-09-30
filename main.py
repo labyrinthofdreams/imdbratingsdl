@@ -46,19 +46,18 @@ if __name__ == '__main__':
         print 'Downloading page', cur_page, 'of', num_pages
         url = args.ratings_url + '?start=' + str(start_pos) + '&view=compact&sort=ratings_date:desc&defaults=1'
         resp = requests.get(url)
-        while resp.status_code != 200:
-            print 'Failed to download page', cur_page, '(or private list)'
-            print 'Retrying...'
-            resp = requests.get(url)
-        html = bs4.BeautifulSoup(resp.text)
-        trs = html.find_all('tr', class_='list_item')
-        if len(trs) == 0:
-            print 'IMDb returned bad data. Retrying...'
-            retry = True
-            while retry:
+        if resp.status_code != 200:
+            while True:
                 resp = requests.get(url)
                 if resp.status_code == 200:
-                    retry = False
+                    html = bs4.BeautifulSoup(resp.text)
+                    trs = html.find_all('tr', class_='list_item')
+                    if len(trs) > 0:
+                        break
+                    else:
+                        print 'IMDb returned bad data. Retrying...'
+                else:
+                    print 'Failed to download page', cur_page, '(or private list). Retrying...'
         del trs[0] # Skip header
         for tr in trs:
             position = unicode(len(imdb) + 1)
