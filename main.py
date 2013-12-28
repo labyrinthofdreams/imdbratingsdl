@@ -45,19 +45,18 @@ if __name__ == '__main__':
     for cur_page, start_pos in get_start_positions(num_pages):
         print 'Downloading page', cur_page, 'of', num_pages
         url = args.ratings_url + '?start=' + str(start_pos) + '&view=compact&sort=ratings_date:desc&defaults=1'
-        resp = requests.get(url)
-        if resp.status_code != 200:
-            while True:
-                resp = requests.get(url)
-                if resp.status_code == 200:
-                    html = bs4.BeautifulSoup(resp.text)
-                    trs = html.find_all('tr', class_='list_item')
-                    if len(trs) > 0:
-                        break
-                    else:
-                        print 'IMDb returned bad data. Retrying...'
+        trs = None
+        while True:
+            resp = requests.get(url)
+            if resp.status_code == 200:
+                html = bs4.BeautifulSoup(resp.text)
+                trs = html.find_all('tr', class_='list_item')
+                if len(trs) > 0:
+                    break
                 else:
-                    print 'Failed to download page', cur_page, '(or private list). Retrying...'
+                    print 'IMDb returned bad data. Retrying...'
+            else:
+                print 'Failed to download page', cur_page, '(or private list). Retrying...'
         del trs[0] # Skip header
         for tr in trs:
             position = unicode(len(imdb) + 1)
