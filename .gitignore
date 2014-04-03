@@ -1,3 +1,6 @@
-*.pyc
-*.csv
-.idea/
+# Ignore everything
+*
+# Whitelist
+!README.txt
+!.gitignore
+!*.py
