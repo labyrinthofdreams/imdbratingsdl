@@ -99,7 +99,8 @@ if __name__ == '__main__':
                     logger.info('Failed to download page %s (or private list). Retrying...', cur_page)
                 html = bs4.BeautifulSoup(resp.text, 'html.parser')
                 trs = html.find_all('tr', class_='list_item')
-                if len(trs) != 251:
+                is_last_page = (cur_page == num_pages)
+                if len(trs) != 251 and not is_last_page:
                     print 'Error: Received less data than expected (251 ratings, received', len(trs), '). Retrying...'
                 else:
                     break
