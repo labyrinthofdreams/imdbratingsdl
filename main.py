@@ -78,9 +78,12 @@ if __name__ == '__main__':
 
     imdb = []
     username = os.path.splitext(os.path.basename(args.outfile))[0]
+    outfile_exists = os.path.exists(args.outfile)
     with codecs.open(args.outfile, 'ab') as outfile:
         w = UnicodeWriter(outfile)
-        w.writerow(['position','const','created','modified','description','Title','Title type','Directors',
+        if not outfile_exists:
+            # Only output header if file didn't exist   
+            w.writerow(['position','const','created','modified','description','Title','Title type','Directors',
                     '{0} rated'.format(username),'IMDb Rating','Runtime (mins)','Year','Genres','Num. Votes',
                     'Release Date (month/day/year)','URL'])
         for cur_page, start_pos in get_start_positions(num_pages):
