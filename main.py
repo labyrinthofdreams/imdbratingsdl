@@ -7,6 +7,21 @@ import requests
 import bs4
 from unicodewriter import UnicodeWriter
 
+def read_cookies(cookie_file):
+    imdbcookies = {}
+    if cookie_file is None:
+        return imdbcookies
+
+    try:
+        with open(cookie_file, 'rb') as f:
+            data = f.read()
+            for item in data.split('; '):
+                parts = item.split('=', 1)
+                imdbcookies[parts[0]] = parts[1]
+        return imdbcookies
+    except IOError:
+        raise
+
 def get_start_positions(last_page):
     cur_page = 1
     while cur_page <= last_page:
@@ -25,6 +40,9 @@ if __name__ == '__main__':
     opts.add_argument('ratings_url', help='URL to IMDb user ratings page')
     opts.add_argument('outfile', help='Path to output CSV file')
     args = opts.parse_args()
+
+    imdbcookies = read_cookies('cookies.txt')
+    session.cookies = requests.utils.cookiejar_from_dict(imdbcookies)
 
     start_time = time.time()
     # Get number of pages
