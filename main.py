@@ -34,8 +34,8 @@ def read_cookies(cookie_file):
     except IOError:
         raise
 
-def get_start_positions(last_page):
-    cur_page = 1
+def get_start_positions(last_page, start_from=1):
+    cur_page = start_from
     while cur_page <= last_page:
         start_pos = (cur_page - 1) * 250 + 1
         yield (cur_page, start_pos)
@@ -51,7 +51,12 @@ if __name__ == '__main__':
     opts = argparse.ArgumentParser(description='Download large IMDb rating lists.')
     opts.add_argument('ratings_url', help='URL to IMDb user ratings page')
     opts.add_argument('outfile', help='Path to output CSV file')
+    opts.add_argument('--start', type=int, default=1, help='Specify page number to start from')
     args = opts.parse_args()
+    
+    if args.start < 1:
+        print 'Start page cannot be less than 1. Setting start page to 1...'
+        args.start = 1
 
     imdbcookies = read_cookies('cookies.txt')
     session.cookies = requests.utils.cookiejar_from_dict(imdbcookies)
@@ -75,6 +80,10 @@ if __name__ == '__main__':
     pages_text = parsed_html.find('div', class_='desc').get_text()
     num_pages = int(re.search('Page 1 of ([0-9]+)', pages_text).group(1))
     logger.info('Found %s pages', num_pages)
+    if args.start > num_pages:
+        print 'Start page', args.start, 'is greater than found pages:', num_pages
+        print 'Setting start pages to last page'
+        args.start = num_pages
 
     imdb = []
     username = os.path.splitext(os.path.basename(args.outfile))[0]
@@ -86,7 +95,7 @@ if __name__ == '__main__':
             w.writerow(['position','const','created','modified','description','Title','Title type','Directors',
                     '{0} rated'.format(username),'IMDb Rating','Runtime (mins)','Year','Genres','Num. Votes',
                     'Release Date (month/day/year)','URL'])
-        for cur_page, start_pos in get_start_positions(num_pages):
+        for cur_page, start_pos in get_start_positions(num_pages, args.start):
             print 'Downloading page', cur_page, 'of', num_pages
             url = args.ratings_url + '?start=' + str(start_pos) + '&view=compact&sort=ratings_date:desc&defaults=1'
             logger.info('Downloading page %s: %s', cur_page, url)
