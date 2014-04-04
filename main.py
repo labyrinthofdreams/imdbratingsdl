@@ -52,7 +52,7 @@ if __name__ == '__main__':
     opts.add_argument('ratings_url', help='URL to IMDb user ratings page')
     opts.add_argument('outfile', help='Path to output CSV file')
     opts.add_argument('--start', type=int, default=1, help='Specify page number to start from')
-    opts.add_argument('--cookies', help='Load cookies from file')
+    opts.add_argument('--cookies', default='cookies.txt', help='Load cookies from file')
     args = opts.parse_args()
     
     if args.start < 1:
