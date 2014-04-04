@@ -21,8 +21,8 @@ logger.addHandler(fh)
 
 def read_cookies(cookie_file):
     imdbcookies = {}
-    if cookie_file is None:
-        return imdbcookies
+    if cookie_file is None or not os.path.exists(cookie_file):
+        return imdbcookies    
 
     try:
         with open(cookie_file, 'rb') as f:
