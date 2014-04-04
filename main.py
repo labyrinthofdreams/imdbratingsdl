@@ -52,13 +52,14 @@ if __name__ == '__main__':
     opts.add_argument('ratings_url', help='URL to IMDb user ratings page')
     opts.add_argument('outfile', help='Path to output CSV file')
     opts.add_argument('--start', type=int, default=1, help='Specify page number to start from')
+    opts.add_argument('--cookies', help='Load cookies from file')
     args = opts.parse_args()
     
     if args.start < 1:
         print 'Start page cannot be less than 1. Setting start page to 1...'
         args.start = 1
 
-    imdbcookies = read_cookies('cookies.txt')
+    imdbcookies = read_cookies(args.cookies)
     session.cookies = requests.utils.cookiejar_from_dict(imdbcookies)
 
     logger.debug('Cookies: %s', imdbcookies)
