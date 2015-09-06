@@ -22,6 +22,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import gevent
+from gevent import monkey
+from gevent.pool import Pool
+# patches stdlib (including socket and ssl modules) to cooperate with other greenlets
+monkey.patch_all()
 import argparse
 import codecs
 import csv
@@ -32,6 +37,8 @@ import time
 import requests
 import bs4
 from unicodewriter import UnicodeWriter
+
+config = {}
 
 session = requests.Session()
 
@@ -71,6 +78,84 @@ def pretty_seconds(t):
     hrs, mins = sep(mins)
     return '{0}h {1}m {2}s'.format(hrs, mins, secs)
 
+def download_page(cur_page, start_pos):
+    print 'Downloading page', cur_page, 'of', config['num_pages']
+    url = 'http://www.imdb.com/user/ur' + config['uid'] + '/ratings?start=' + str(start_pos) + '&view=compact&sort=ratings_date:desc&defaults=1'
+    logger.info('Downloading page %s: %s', cur_page, url)
+    trs = None
+    # Try downloading the page until we've received all 201 rows of rating data
+    while True:
+        resp = session.get(url)
+        if resp.status_code != 200:
+            print 'Failed to download page', cur_page, '(or private list). Retrying...'
+            logger.info('Failed to download page %s (or private list). Retrying...', cur_page)
+        html = bs4.BeautifulSoup(resp.text, 'html.parser')
+        trs = html.find_all('tr', class_='list_item')
+        is_last_page = (cur_page == config['num_pages'])
+        if len(trs) != 251 and not is_last_page:
+            print 'Error: Received less data than expected (251 ratings, received', len(trs), '). Retrying...'
+        else:
+            break
+    print 'Parsing page', cur_page
+    abort = False
+    del trs[0] # Skip header
+    for tr in trs:
+        if abort:
+            break
+        try:
+            if args.append:
+                position = unicode(int(imdb_old[-1][0]) + len(imdb_all) + 1)
+            else:
+                position = unicode(len(imdb_all) + 1)
+            html_title = tr.find('td', class_='title')
+            imdb_url = html_title.a['href']
+            imdb_id = re.search('(tt[0-9]{7})', imdb_url).group(1)
+            if 'episode' in html_title['class']:
+                # This ensures that there's a space between
+                # series title and episode name
+                html_title.a.append(' ')
+            title = html_title.get_text()
+            title_type = tr.find('td', class_='title_type').get_text().strip()
+            if title_type == 'Feature':
+                title_type = 'Feature Film'
+            rater = tr.select('td.rater_ratings > a')
+            if rater:
+                user_rating = rater[0].get_text().strip()
+            else:
+                user_rating = tr.find('td', class_='your_ratings').get_text().strip()
+            imdb_rating = tr.find('td', class_='user_rating').get_text()
+            if imdb_rating == '0.0':
+                imdb_rating = u''
+            year = tr.find('td', class_='year').get_text()
+            num_votes = tr.find('td', class_='num_votes').get_text().replace(',', '')
+            if num_votes == '-':
+                num_votes = u'0'
+            url = unicode('http://www.imdb.com' + imdb_url)
+            data = [position, imdb_id, u'', u'', u'', title, title_type,
+                    u'', user_rating, imdb_rating, u'', year, u'',
+                    num_votes, u'', url]
+            is_dupe = any(e[1] == imdb_id for e in imdb_all)
+            # TV Episodes may have the same show IMDb id
+            if is_dupe and title_type not in ('TV Episode', 'TV Series'):
+                print 'Found a duplicate entry:', str(data)
+                logger.info('[%s] Found a duplicate entry: %s', args.outfile, str(data))
+            # Check if we reached an entry that already exists
+            found_last = any(e[1] == imdb_id for e in imdb_old)
+            last = None
+            if found_last:
+                last = [entry for entry in imdb_old if entry[1] == imdb_id][0]
+            if args.append and found_last and title_type not in ('TV Episode', 'TV Series') and user_rating == last[8]:
+                print 'Found the last new entry. Aborting...'
+                abort = True
+            else:
+                with codecs.open(args.outfile, 'ab') as outfile:
+                    w = UnicodeWriter(outfile)
+                    w.writerow(data)
+                imdb_all.append(data)
+        except Exception as e:
+            print 'Error: {0}'.format(str(e))
+            logger.exception('Error while parsing: %s', str(e))
+
 if __name__ == '__main__':
     opts = argparse.ArgumentParser(description='Download large IMDb rating lists.')
     opts.add_argument('ratings_url', help='URL to IMDb user ratings page')
@@ -78,7 +163,10 @@ if __name__ == '__main__':
     opts.add_argument('--start', type=int, default=1, help='Specify page number to start from')
     opts.add_argument('--cookies', default='cookies.txt', help='Load cookies from file')
     opts.add_argument('--append', action='store_true', help='Append new entries and stop after found all new entries')
+    opts.add_argument('--threads', default=3, type=int, help='Number of simultaneous downloads')
     args = opts.parse_args()
+
+    pool = Pool(args.threads)
 
     if args.start < 1:
         print 'Start page cannot be less than 1. Setting start page to 1...'
@@ -92,8 +180,8 @@ if __name__ == '__main__':
     start_time = time.time()
     # Get number of pages
     print 'Retrieving number of pages'
-    uid = re.search('ur([0-9]{8})', args.ratings_url).group(1)
-    url = 'http://www.imdb.com/user/ur{0}/ratings?start=1&view=compact&sort=ratings_date:desc&defaults=1'.format(uid)
+    config['uid'] = re.search('ur([0-9]{7,8})', args.ratings_url).group(1)
+    url = 'http://www.imdb.com/user/ur{0}/ratings?start=1&view=compact&sort=ratings_date:desc&defaults=1'.format(config['uid'])
     logger.info('Retrieving number of pages from %s', url)
     resp = session.get(url)
     while resp.status_code != 200:
@@ -105,12 +193,12 @@ if __name__ == '__main__':
     # Note: There should be only one element called div.desc
     # but there's no guarantee
     pages_text = parsed_html.find('div', class_='desc').get_text()
-    num_pages = int(re.search('Page 1 of ([0-9]+)', pages_text).group(1))
-    print 'Found {0} pages'.format(num_pages)
-    if args.start > num_pages:
-        print 'Start page', args.start, 'is greater than found pages:', num_pages
+    config['num_pages'] = int(re.search('Page 1 of ([0-9]+)', pages_text).group(1))
+    print 'Found {0} pages'.format(config['num_pages'])
+    if args.start > config['num_pages']:
+        print 'Start page', args.start, 'is greater than found pages:', config['num_pages']
         print 'Setting start pages to last page'
-        args.start = num_pages
+        args.start = config['num_pages']
     imdb_all = []
     username = os.path.splitext(os.path.basename(args.outfile))[0]
     outfile_exists = os.path.exists(args.outfile)
@@ -127,82 +215,9 @@ if __name__ == '__main__':
             r = csv.reader(infile)
             for row in r:
                 imdb_old.append(row)
-    for cur_page, start_pos in get_start_positions(num_pages, args.start):
-        print 'Downloading page', cur_page, 'of', num_pages
-        url = 'http://www.imdb.com/user/ur' + uid + '/ratings?start=' + str(start_pos) + '&view=compact&sort=ratings_date:desc&defaults=1'
-        logger.info('Downloading page %s: %s', cur_page, url)
-        trs = None
-        # Try downloading the page until we've received all 201 rows of rating data
-        while True:
-            resp = session.get(url)
-            if resp.status_code != 200:
-                print 'Failed to download page', cur_page, '(or private list). Retrying...'
-                logger.info('Failed to download page %s (or private list). Retrying...', cur_page)
-            html = bs4.BeautifulSoup(resp.text, 'html.parser')
-            trs = html.find_all('tr', class_='list_item')
-            is_last_page = (cur_page == num_pages)
-            if len(trs) != 251 and not is_last_page:
-                print 'Error: Received less data than expected (251 ratings, received', len(trs), '). Retrying...'
-            else:
-                break
-        print 'Parsing page', cur_page
-        abort = False
-        del trs[0] # Skip header
-        for tr in trs:
-            if abort:
-                break
-            try:
-                if args.append:
-                    position = int(imdb_old[-1][0]) + len(imdb_all) + 1
-                else:
-                    position = unicode(len(imdb_all) + 1)
-                html_title = tr.find('td', class_='title')
-                imdb_url = html_title.a['href']
-                imdb_id = re.search('(tt[0-9]{7})', imdb_url).group(1)
-                if 'episode' in html_title['class']:
-                    # This ensures that there's a space between
-                    # series title and episode name
-                    html_title.a.append(' ')
-                title = html_title.get_text()
-                title_type = tr.find('td', class_='title_type').get_text().strip()
-                if title_type == 'Feature':
-                    title_type = 'Feature Film'
-                rater = tr.select('td.rater_ratings > a')
-                if rater:
-                    user_rating = rater[0].get_text().strip()
-                else:
-                    user_rating = tr.find('td', class_='your_ratings').get_text().strip()
-                imdb_rating = tr.find('td', class_='user_rating').get_text()
-                if imdb_rating == '0.0':
-                    imdb_rating = u''
-                year = tr.find('td', class_='year').get_text()
-                num_votes = tr.find('td', class_='num_votes').get_text().replace(',', '')
-                if num_votes == '-':
-                    num_votes = u'0'
-                url = unicode('http://www.imdb.com' + imdb_url)
-                data = [position, imdb_id, u'', u'', u'', title, title_type,
-                        u'', user_rating, imdb_rating, u'', year, u'',
-                        num_votes, u'', url]
-                is_dupe = any(e[1] == imdb_id for e in imdb_all)
-                # TV Episodes may have the same show IMDb id
-                if is_dupe and title_type not in ('TV Episode', 'TV Series'):
-                    print 'Found a duplicate entry:', str(data)
-                    logger.info('[%s] Found a duplicate entry: %s', args.outfile, str(data))
-                # Check if we reached an entry that already exists
-                found_last = any(e[1] == imdb_id for e in imdb_old)
-                if args.append and found_last:
-                    print 'Found the last new entry. Aborting...'
-                    abort = True
-                else:
-                    with codecs.open(args.outfile, 'ab') as outfile:
-                        w = UnicodeWriter(outfile)
-                        w.writerow(data)
-                    imdb_all.append(data)
-            except Exception as e:
-                print 'Error: {0}'.format(str(e))
-                logger.exception('Error while parsing: %s', str(e))
-        if abort:
-            break
+    for page in get_start_positions(config['num_pages'], args.start):
+        pool.spawn(download_page, page[0], page[1])
+    pool.join()
     end_time = time.time()
     print 'Downloaded', len(imdb_all), 'ratings in', pretty_seconds(end_time - start_time)
     logger.info('Downloaded %s ratings in %s', len(imdb_all), pretty_seconds(end_time - start_time))
