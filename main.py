@@ -22,14 +22,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import gevent
 from gevent import monkey
 from gevent.pool import Pool
 # patches stdlib (including socket and ssl modules) to cooperate with other greenlets
 monkey.patch_all()
 import argparse
 import codecs
-import csv
 import logging
 import os.path
 import re
