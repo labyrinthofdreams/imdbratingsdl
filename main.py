@@ -133,9 +133,6 @@ def download_page(cur_page, start_pos):
             if is_dupe and title_type not in ('TV Episode', 'TV Series'):
                 print 'Found a duplicate entry:', str(data)
                 logger.info('[%s] Found a duplicate entry: %s', args.outfile, str(data))
-            with codecs.open(args.outfile, 'ab') as outfile:
-                w = UnicodeWriter(outfile)
-                w.writerow(data)
             imdb_all.append(data)
         except Exception as e:
             print 'Error: {0}'.format(str(e))
@@ -199,6 +196,9 @@ if __name__ == '__main__':
     for page in get_start_positions(config['num_pages'], args.start):
         pool.spawn(download_page, page[0], page[1])
     pool.join()
+    with codecs.open(args.outfile, 'ab') as outfile:
+        w = UnicodeWriter(outfile)
+        w.writerows(imdb_all)
     end_time = time.time()
     print 'Downloaded', len(imdb_all), 'ratings in', pretty_seconds(end_time - start_time)
     logger.info('Downloaded %s ratings in %s', len(imdb_all), pretty_seconds(end_time - start_time))
