@@ -130,10 +130,12 @@ def download_page(cur_page, start_pos):
                     num_votes, u'', url]
             is_dupe = any(e[1] == imdb_id for e in imdb_all)
             # TV Episodes may have the same show IMDb id
-            if is_dupe and title_type not in ('TV Episode', 'TV Series'):
+            if is_dupe and title_type not in ('TV Episode', 'TV Series', 'Mini-Series'):
+                # This may happen if user rates another film while we're downloading
                 print 'Found a duplicate entry:', str(data)
                 logger.info('[%s] Found a duplicate entry: %s', args.outfile, str(data))
-            imdb_all.append(data)
+            else:
+                imdb_all.append(data)
         except Exception as e:
             print 'Error: {0}'.format(str(e))
             logger.exception('Error while parsing: %s', str(e))
