@@ -1,6 +1,14 @@
-IMDb may fail to export very large rating lists. This script can be used to download
-ratings from the compact view.
+Download another user's IMDb ratings
 
-Note: The following fields are not available:
+usage: main.py [-h] [--start START] [--cookies COOKIES] [--threads THREADS]
+               ratings_url outfile
 
-created, modified, description, directors, runtime, genres, release date
+positional arguments:
+  ratings_url        URL to IMDb user ratings page
+  outfile            Path to output CSV file
+
+optional arguments:
+  -h, --help         show this help message and exit
+  --start START      Specify page number to start from
+  --cookies COOKIES  Load cookies from file
+  --threads THREADS  Number of simultaneous downloads
